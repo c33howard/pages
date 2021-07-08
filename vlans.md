@@ -10,9 +10,9 @@ Before talking about VLANs, we need to talk about LANs.  The LAN is the local pa
 
 ## Layers
 
-You'll hear reference to "layers" in networking a lot.  This refers to the OSI model.  You can look it up.  I'll be talking mostly about layer 2 and layer 3, with a bit of layer 7.  If you're a software engineer, you spend most of your time in layer 7, with a bit of layer 3.
+You'll hear reference to "layers" in networking a lot.  This refers to the OSI model.  You can look it up.  I'll be talking mostly about layer 2 and layer 3/4, with a bit of layer 7.  If you're a software engineer, you spend most of your time in layer 7, with a bit of layer 3/4.
 
-### Layer 2: switches and MACs
+## Layer 2: switches and MACs
 
 So, you have a switch.  It has multiple devices connected to it via ethernet cables.  Switches pass ethernet frames around.  A frame is *not* a packet, although the two often do map 1:1.  A frame also does not have any IP information in it.  An ethernet frame has source (src) and destination (dst) MAC addresses.  Each ethernet card has a MAC, which you can think of as a serial number installed into the network card (NIC).  When a frame is put on the wire, the dst on the frame is set to the MAC of the target NIC.  All a switch does is store a lookup table of MACs to ports.  When the switch receives a frame, it does a lookup in its table for the dst MAC and sends the frame out the associated port.  When a NIC receives a frame, it accepts frames where the dst is its MAC, and drops other frames.
 
@@ -57,5 +57,24 @@ An ARP "who-has" message is an ethernet frame sent to the broadcast MAC, so all 
 
 One interesting detail of this approach is that generally hosts send ARP requests and responses and both traverse the switch.  Therefore a switch can just passively watch ARP traffic as it does the appropriate forwarding and can use this to build up its own table.
 
-### Layer 3: routers and IPs
+## Layer 3: routers and IPs
 
+Within an ethernet frame, we have an IP packet.  IP packets have a src and dst IP (either v4 or v6) and can be routed across networks.  For now, we'll stick to our simple home network.
+
+### CIDRs
+
+I'll talk about v4 for now.  Each IP is a 32 bit number.  Every host on the same network has the same set of leading bits in the IP address.  This is written as `192.168.1.0/24`.  The /24 means that the first 24 bits (ie 3 \* 8 bits, or first three "octets") define the network, and the remaining bits define the host within the network.  You may have heard of class A/B/C networks, these correspond to /8, /16, and /24, although classes are no longer used.  The prefix can be of any length, but must be a smaller prefix than /24 to be routed on the internet.  RFC1918 defines special prefixes, including 192.168.0.0/16 as "non-routable", which means that those packets cannot be routed onto the internet.  This is why most home networks use a prefix from RFC1918 space.
+
+Typically, the lowest non-zero address in a range is the router, so in `192.168.1.0/24`, that would be `192.168.1.1`.  This is just a convention and the router could have an IP.  Your host in the network probably has a different IP.
+
+### Routing
+
+When the kernel routes a packet off the box, it does a lookup in the routing table to determine which network to use.  Here's my routing table:
+
+```
+$ ip -4 route show
+default via 192.168.1.1 dev eth0.1 
+192.168.1.0/24 dev eth0.1 proto kernel scope link src 192.168.1.2 
+```
+
+The dst of the packet is compared to all the rules in the routing table and the *most specific* prefix is matched.  Most specific means the longest prefix.  So a /24 would win over a /22, and a /8 would win over a /0 (the default route is really 0.0.0.0/0, ie *any* IP).  So, when I send a packet to another host on my local network, ie `192.168.1.101`, the kernel will send that out on the device `eth0.1` and use the src of `192.168.1.2`.  For any other packet, the packet will be routed "via" `192.168.1.1`, which happens to be a router.  More on routing later.
