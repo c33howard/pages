@@ -86,7 +86,7 @@ This shows that, when I send a packet to another host on my local network, ie `1
 On an IPv4 network, IP addresses are typically assigned by a DHCP server.  IPv6 works differently and I'll talk about that elsewhere.  When a host wants an IP address, it sends a DHCP request packet (using UDP) to the broadcast IP address (also using the broadcast MAC).  Hopefully a DHCP server on the network receives that request, it then looks at the IP range it's been configured to manage, selects an IP from that range, and sends a response back (reminder, this document is hand-wavy; I'm not going into detail about the DHCP protocol).  The response uses the address to be assigned, which will be on the local network, but that the host doesn't know about yet.  Crucially, the ethernet frame dst is the MAC of the NIC where the request came from.  This ensures that the response gets to the requester.  The DHCP response probably also includes information like: which DNS server to use, what DNS domain the machine is part of, what the gateway is, etc.
 
 ```
-──> sudo tcpdump -i eth0 -e -nn port 67 or port 68
+$ sudo tcpdump -i eth0 -e -nn port 67 or port 68
 00:20:30.594658 b4:2e:99:ef:fd:4a > ff:ff:ff:ff:ff:ff, ethertype IPv4 (0x0800), length 342: 0.0.0.0.68 > 255.255.255.255.67: BOOTP/DHCP, Request from b4:2e:99:ef:fd:4a, length 300
 00:20:30.595038 fc:aa:14:ad:b2:08 > b4:2e:99:ef:fd:4a, ethertype IPv4 (0x0800), length 342: 192.168.1.1.67 > 192.168.1.2.68: BOOTP/DHCP, Reply, length 300
 ```
@@ -137,6 +137,45 @@ Now when response packets are routed, the route table can determine which NIC to
 
 ## Gateways and Internet Access
 
-I've mentioned gateways, the default route, and internet access before.  How does this work?
+I've mentioned gateways, the default route, and internet access before.  How does this work?  We use a router.  A "router" is a device that straddles two networks and knows how to pass packets between the two networks.  In a home, the router forwards packets from the local network to the internet, and the response packets from the internet to the local network.  Note that this definition says nothing about wifi, despite what the marketing folks tell you.
 
-A "router" is a device that straddles two networks and knows how to pass packets between the two networks.  In a home, the router forwards packets from the local network to the internet, and the response packets from the internet to the local network.  
+### Public Routing
+
+For now, let's pretend that your home isn't using RFC1918 addresses, but is instead using a public range.  We'll use the range `203.0.113.0/24`.  The router is `203.0.113.1` and your workstation is `203.0.113.2`.  The router has two NICs, one for the local network and one for the WAN (wide area network == internet).
+
+The route table on your workstation looks like this:
+
+```
+$ ip -4 route show
+default via 203.0.113.1 dev eth0
+203.0.113.0/24 dev eth0 proto kernel scope link src 203.0.113.2 
+```
+
+And the route table on your router looks like this:
+
+```
+$ ip -4 route show
+default via 198.51.100.1 dev wan0 
+198.51.100.1/24 dev wan0 proto kernel scope link src 198.51.100.42
+203.0.113.0/24 dev eth0 proto kernel scope link src 203.0.113.1
+```
+
+This shows that our internet service provider (ISP) gave us the IP `198.51.100.42`, probably via DHCP from the ISPs DHCP server.  The ISP router of `192.51.100.1` is our gateway and where we send all packets that we don't know how to directly route ourselves.  The eth0 device shows the local network and our local IP.
+
+On our workstation, we now want to do a DNS lookup and we're using Google's public DNS of `8.8.8.8`.  Here's the flow:
+
+1. First we create a packet with a dst of `8.8.8.8` and src of `203.0.113.2`.
+2. We look at our route table, and see that 8.8.8.8 only matches the default route, so we send that packet via `203.0.113.1`, which is our router.
+3. We look in our ARP table for `203.0.113.1`, send an ARP who-has if necessary, but then see the MAC of the eth0 NIC on the router.
+4. We send the frame from our workstation to the router (it may traverse a switch) with a MAC dst of the router and src MAC of ourself.
+5. The router receives the frame, sees that the dst MAC is itself and processes the packet.
+6. The router looks at the dst IP and sees `8.8.8.8` which isn't itself, and since it's a router, decides to forward the packet.
+7. The router consults its routing table and the only match is the default route, so the packet is sent via `198.51.100.1`, which the ISP router.
+8. The router looks is its ARP table for `198.51.100.1` and finds the MAC of the ISP router.
+9. The frame is sent to the ISP router with the MAC dst of the ISP router we got from our ARP table and the src MAC of wan0 on the router.
+
+This process repeats many times between us and `8.8.8.8` and the reverse happens with the response packet.  You can see the routers between you and a destination by using the traceroute tool.  On your machine, try `traceroute 8.8.8.8`.  (Note that some routers have disabled traceroute packets, so you may see blank lines.  The flag `-n` shows you the raw IPs, instead of the hostnames.)
+
+### Private Routing and NAT
+
+The previous example worked because we were using public IPs.  But we use RFC1918 addresses at home and these aren't routable on the public internet.  (This just means that internet routers are configured to drop all packets with a dst defined by RFC1918.)  
