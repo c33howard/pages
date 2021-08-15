@@ -178,4 +178,7 @@ This process repeats many times between us and `8.8.8.8` and the reverse happens
 
 ### Private Routing and NAT
 
-The previous example worked because we were using public IPs.  But we use RFC1918 addresses at home and these aren't routable on the public internet.  (This just means that internet routers are configured to drop all packets with a dst defined by RFC1918.)  
+The previous example worked because we were using public IPs.  But we use RFC1918 addresses at home and these aren't routable on the public internet.  (This just means that internet routers are configured to drop all packets with a dst defined by RFC1918.)  Note that this section doesn't really apply to IPv6.  With IPv6, every machine gets a publicly routable IP.  This part of IPv6 is simpler.
+
+So, how can we still use the internet if we're using non-routable IPs in our home network?  We use network address translation (NAT).  Our router gets a single publicly routable IPv4 address from our ISP.  It then "translates" all packets that it forwards to the internet.  It has to write down all the translations it has done, so that response packets can have the reverse translation applied.  The translation is to lie to the rest of the internet and make it appear that the router originated the packet.  Then, the response packet can be addressed to the router.
+
