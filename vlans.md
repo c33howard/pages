@@ -182,3 +182,28 @@ The previous example worked because we were using public IPs.  But we use RFC191
 
 So, how can we still use the internet if we're using non-routable IPs in our home network?  We use network address translation (NAT).  Our router gets a single publicly routable IPv4 address from our ISP.  It then "translates" all packets that it forwards to the internet.  It has to write down all the translations it has done, so that response packets can have the reverse translation applied.  The translation is to lie to the rest of the internet and make it appear that the router originated the packet.  Then, the response packet can be addressed to the router.
 
+How does this work?  The NAT box sees a packet inbound on an internal interface and sees that it's not destined for it.  Instead the packet should be routed to the default.  But NAT is configured.  So, when it routes the packet, it transforms the src IP and src port.  It then tracks the translation that it did in a NAT table.  When a response packet comes with the dst IP and dst port matching what's in the NAT table, the router performs the reverse translation and sends the packet back out the internal interface.  Here's an example tcpdump from my router of a DNS lookup from an internal node to `8.8.8.8`.
+
+On the internal interface, the router sees the incoming packet and you see the response packet.  Note the use of RFC1918 addresses.
+
+```
+└──> sudo tcpdump -i eth0 -n port 53
+14:41:38.315824 IP 192.168.1.2.51888 > 8.8.8.8.53: 48315+ [1au] A? example.com. (52)
+14:41:38.325898 IP 8.8.8.8.53 > 192.168.1.2.51888: 48315$ 1/0/1 A 93.184.216.34 (56)
+```
+
+And here's the public interface.  The router has transformed the src IP, but left the port alone.
+
+```
+└──> sudo tcpdump -i wan0 -n port 53
+14:41:38.315977 IP 53.160.47.177.51888 > 8.8.8.8.53: 48315+ [1au] A? example.com. (52)
+14:41:38.325834 IP 8.8.8.8.53 > 53.160.47.177.51888: 48315$ 1/0/1 A 93.184.216.34 (56)
+```
+
+During this transformation, the NAT state would contain an entry that looks more or less like this:
+
+```
+(UDP, internal=192.168.1.2:51888, external=53.160.47.177:51888)
+```
+
+If that was the entire NAT table (because there's only been one recent outbound flow), consider what would happen if the router saw an inbound packet on the public interface to 53.160.47.177:10000.  The kernel would accept the packet, because the packet is destined for its interface.  It would look in the NAT table and find no entry.  It would also look at the local open ports and find no entry.  So, the packet would be dropped.  If you want to accept an inbound connection (say because you're playing a peer-to-peer game, or you're accepting a video call), then this is no good.
