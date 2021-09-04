@@ -187,7 +187,7 @@ How does this work?  The NAT box sees a packet inbound on an internal interface 
 On the internal interface, the router sees the incoming packet and you see the response packet.  Note the use of RFC1918 addresses.
 
 ```
-└──> sudo tcpdump -i eth0 -n port 53
+$ sudo tcpdump -i eth0 -n port 53
 14:41:38.315824 IP 192.168.1.2.51888 > 8.8.8.8.53: 48315+ [1au] A? example.com. (52)
 14:41:38.325898 IP 8.8.8.8.53 > 192.168.1.2.51888: 48315$ 1/0/1 A 93.184.216.34 (56)
 ```
@@ -195,7 +195,7 @@ On the internal interface, the router sees the incoming packet and you see the r
 And here's the public interface.  The router has transformed the src IP, but left the port alone.
 
 ```
-└──> sudo tcpdump -i wan0 -n port 53
+$ sudo tcpdump -i wan0 -n port 53
 14:41:38.315977 IP 53.160.47.177.51888 > 8.8.8.8.53: 48315+ [1au] A? example.com. (52)
 14:41:38.325834 IP 8.8.8.8.53 > 53.160.47.177.51888: 48315$ 1/0/1 A 93.184.216.34 (56)
 ```
