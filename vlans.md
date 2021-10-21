@@ -10,20 +10,20 @@ Before talking about VLANs, we need to talk about LANs.  The LAN is the local pa
 
 ## Layers
 
-You'll hear reference to "layers" in networking a lot.  This refers to the OSI model.  You can look it up.  The short version is that layer 1 is the physical layer and is how bits move from one place to another: wires or wireless.  The next layer is the link layer, it's more or less everything directly connected within your home.  Layer three is the network layer and it's how you can address any endpoint on the internet.  Layer four is how you can transport data to another machine.  Layers five and six are mostly ignored these days.  Layer seven is the application layer and it's how applications interpret the data.  I'll mostly be talking about layers two and three.
+You'll hear reference to "layers" in networking a lot.  This refers to the OSI model.  You can [look it up](https://en.wikipedia.org/wiki/OSI_model).  The short version is that layer 1 is the physical layer and is how bits move from one place to another: wires or wireless.  Layer two is the link layer, it's more or less everything directly connected within your home.  Layer three is the network layer and it's how you can address a single chunk of data to any endpoint on the internet.  Layer four is how you can transport arbitrary amounts of data to another machine.  Layers five and six are mostly ignored these days.  Layer seven is the application layer and it's how applications interpret the data.  I'll mostly be talking about layers two and three.  Again, this is the hand-wavy explanation.
 
 ## Layer 2: switches and MACs
 
-So, you have a switch.  It has multiple devices connected to it via ethernet cables.  Switches pass ethernet "frames" around.  A frame is *not* a packet, although the two often do map 1:1.  A frame also does not have any IP information in it.  An ethernet frame has source (src) and destination (dst) MAC addresses.  Each ethernet card has a MAC, which you can think of as a serial number installed into the network card (NIC).  When a frame is put on the wire, the dst on the frame is set to the MAC of the target NIC.  All a switch does is store a lookup table of MACs to ports.  When the switch receives a frame, it does a lookup in its table for the dst MAC and sends the frame out the associated port.  When a NIC receives a frame, it accepts frames where the dst is its MAC, and drops other frames.
+So, you have a switch.  It has multiple devices connected to it via ethernet cables.  Switches pass ethernet "frames" around.  A frame is *not* a packet, although the two often do map 1:1.  A frame also does not have any IP information in it.  An ethernet frame has source (src) and destination (dst) MAC addresses.  Each ethernet card has a MAC, which you can think of as a serial number installed into the network card (NIC).  When a frame is put on the wire, the dst on the frame is set to the MAC of the target NIC.  When a NIC receives a frame, it accepts frames where the dst is its MAC, and drops other frames.  All a switch does is store a lookup table of MACs to ports (ie a plug for a cable).  When the switch receives a frame, it does a lookup in its table for the dst MAC and sends the frame out the associated port.
 
-There's a special MAC address (`ff:ff:ff:ff:ff:ff`) that is the broadcast MAC.  When a switch receives a frame with this MAC as the dst, it forwards it to all ports.  A host that receives a frame where the dst is the broadcast MAC accepts the frame.
+There's a special MAC address (`ff:ff:ff:ff:ff:ff`) that is the broadcast MAC.  A NIC that receives a frame where the dst is the broadcast MAC accepts the frame.  When a switch receives a frame with this MAC as the dst, it forwards it to all ports.
 
 A note about terms:
 
-* unicast: send to a single, specific target
-* anycast: send to a single endpoint, but multiple hosts are potential endpoints (think of a call center: you don't care which specific agent you talk to, but you want to talk to a single person)
-* multicast: send to everyone of a set of registered listeners
-* broadcast: send to everyone
+* unicast: send to a single, specific target (analogy: a phone call between two people)
+* anycast: send to a single endpoint, but multiple hosts are potential endpoints (analogy: a call center; you don't care which specific agent you talk to, but you want to talk to a single person)
+* multicast: send to everyone of a set of registered listeners (analogy: a conference call; members dial-in and everyone dialed-in hears the conversation)
+* broadcast: send to everyone (analogy: TV or radio)
 
 This leads to two questions:
 
@@ -65,7 +65,7 @@ Within an ethernet frame, we have an IP packet (either v4 or v6).  IP packets ha
 
 I'll talk about v4 for now.  Each IP is a 32 bit number.  Every host on the same network has the same set of leading bits in the IP address.  This is written as `192.168.1.0/24`.  The `/24` means that the first 24 bits (ie 3 \* 8 bits, or first three "octets") define the network, and the remaining bits define the host within the network.  You may have heard of class A/B/C networks, these correspond to `/8`, `/16`, and `/24`, although classes are no longer used; instead just say "slash 24".  The prefix can be of any length, but for a home network, you probably want a /24, which gives you 8 bits worth of hosts or 256 IPs.  RFC1918 defines special prefixes, including `192.168.0.0/16` as "non-routable", which means that those packets cannot be routed onto the internet.  This is why most home networks use a prefix from RFC1918 space.  Within `192.168.0.0/16` there are 256 networks of size `/24`.  Two of the most common are `192.168.0.0/24` and `192.168.1.0/24`.  But there's nothing special about those; you can use whatever you'd like within that range, or the two other larger ranges in RFC1918 (`10.0.0.0/8` and `172.16.0.0/12`).
 
-Typically, the lowest non-zero address in a range is the router, so in `192.168.1.0/24`, that would be `192.168.1.1`.  This is just a convention and the router could have an IP.  Your host in the network probably has a different IP.
+Typically, the lowest non-zero address in a range is the router, so in `192.168.1.0/24`, that would be `192.168.1.1`.  This is just a convention and the router could have any IP.  Your host in the network probably has a different IP.
 
 ### Route Table
 
@@ -99,15 +99,15 @@ As an aside, let's think through what happens if two hosts (A, and B) on the sam
 
 Meanwhile, host B wants to print.  It performs the same steps as host A and gets to the point where it needs to send an ARP who-has message.  The printer responds, since it has `192.168.1.3`.  Since it just got an ARP from `192.168.1.2` it updates its local ARP table and now `192.168.1.2` has the MAC of host B!  The response packets from the printer to `192.168.1.2` that host A are expecting to see are now redirected to host B.  Host A never receives response packets, so it thinks the printer is offline.  And host B sees all the response frames for host B, which it drops, because the MAC doesn't match.
 
-As far as I'm aware, anycast isn't really a thing on local networks.  But what we've described is a way to "implement" anycast on a local network.  Anycast, as it's used on the internet, is more or less this: duplicate IPs located on different spots on the network, where routing protocols send the packets to one of the duplicates based on a criteria.
+Anycast is exceptionally unusual on a small local network.  If you've configured it, you probably don't need to read my guide.  But what we've described is a way to "implement" anycast on a local network.  Anycast, as it's used on the internet, is equivalent to this, but at layer three.  Anycast is just duplicate IPs located on different spots on the network, where routing protocols send the packets to one of the duplicates based on a criteria.
 
 ## A Second Network
 
-Now let's imagine we want to add a second network to the house for guests.  As we have sensitive data on our network (perhaps family photos, or old tax records), we want to completely separate guests from our internal network.  The simplest thing we can do is purchase a second switch and keep everything isolated.  Because the guest network has distinct hardware, all the MACs will be different.  But we need to assign an IP range.  As the two networks are totally separate, we could give them both the same IP range, and things would work just fine.  Each host would only see one instance of `192.168.1.1` and would have a single MAC associated with that.
+Now let's imagine we want to add a second network to the house for guests.  As we have sensitive data on our network (perhaps family photos, or old tax records), we want to completely separate guests from our internal network.  The simplest thing we can do is purchase a second switch and keep everything isolated.  Because the guest network has distinct hardware, all the MACs will be different.  But we need to assign an IP range.  As the two networks are totally separate, we could give them both the same IP range, and things would work just fine, even if both are connected to the internet.  The two separate physical networks in your home would be equivalent to you and your neighbour using the same IP ranges.  Each host would only see one instance of `192.168.1.1` and would have a single MAC associated with that.
 
 But what if we wanted to share a device?  An example of this might be a printer that we want to allow guests to use.  The "simplest" thing would be to have the printer connected to a print server machine that has two NICs, one physically connected to each network.
 
-Let's continue with our assumption of both networks using `192.168.1.0/24`.  Say the printer NIC on the main network is assigned `192.168.1.101` and the printer NIC on the secondary network is assigned `192.168.1.202`.  These are coincidental assignments by DHCP servers on each network and I picked distinct IPs for readability of this example; they could be the same IPs.
+Let's continue with our assumption of both networks using `192.168.1.0/24`.  Say the printer NIC on the main network is assigned `192.168.1.101` and the printer NIC on the secondary network is assigned `192.168.1.202`.  These are coincidental assignments by DHCP servers on each network and I picked distinct IPs for readability of this example; they could be the same IP.
 
 Now say a host on the main network talks to the printer.  It sets the dst IP of the packet to `192.168.1.101` and the src to itself `192.168.1.2`.  It consults the routing table and finds that the dst is on the local network and it should use device eth0 to send the packet.  It consults its ARP table and finds the MAC (and maybe updates the table by sending an ARP who-has message).  The packet leaves the machine and hits the switch.  The switch does a lookup of the MAC and forwards the packet out the appropriate port.  The printer receives the frame, sees that the dst MAC is itself, so delivers the IP packet.  The IP packet is also destined to it, so the request is processed.
 
@@ -165,13 +165,13 @@ This shows that our internet service provider (ISP) gave us the IP `198.51.100.4
 On our workstation, we now want to do a DNS lookup and we're using Google's public DNS of `8.8.8.8`.  Here's the flow:
 
 1. First we create a packet with a dst of `8.8.8.8` and src of `203.0.113.2`.
-2. We look at our route table, and see that 8.8.8.8 only matches the default route, so we send that packet via `203.0.113.1`, which is our router.
+2. We look at our route table, and see that `8.8.8.8` only matches the default route, so we send that packet via `203.0.113.1`, which is our router.
 3. We look in our ARP table for `203.0.113.1`, send an ARP who-has if necessary, but then see the MAC of the eth0 NIC on the router.
 4. We send the frame from our workstation to the router (it may traverse a switch) with a MAC dst of the router and src MAC of ourself.
 5. The router receives the frame, sees that the dst MAC is itself and processes the packet.
 6. The router looks at the dst IP and sees `8.8.8.8` which isn't itself, and since it's a router, decides to forward the packet.
 7. The router consults its routing table and the only match is the default route, so the packet is sent via `198.51.100.1`, which the ISP router.
-8. The router looks is its ARP table for `198.51.100.1` and finds the MAC of the ISP router.
+8. The router looks in its ARP table for `198.51.100.1` and finds the MAC of the ISP router.
 9. The frame is sent to the ISP router with the MAC dst of the ISP router we got from our ARP table and the src MAC of wan0 on the router.
 
 This process repeats many times between us and `8.8.8.8` and the reverse happens with the response packet.  You can see the routers between you and a destination by using the traceroute tool.  On your machine, try `traceroute 8.8.8.8`.  (Note that some routers have disabled traceroute packets, so you may see blank lines.  The flag `-n` shows you the raw IPs, instead of the hostnames.)
@@ -182,7 +182,7 @@ The previous example worked because we were using public IPs.  But we use RFC191
 
 So, how can we still use the internet if we're using non-routable IPs in our home network?  We use network address translation (NAT).  Our router gets a single publicly routable IPv4 address from our ISP.  It then "translates" all packets that it forwards to the internet.  It has to write down all the translations it has done, so that response packets can have the reverse translation applied.  The translation is to lie to the rest of the internet and make it appear that the router originated the packet.  Then, the response packet can be addressed to the router.
 
-How does this work?  The NAT box sees a packet inbound on an internal interface and sees that it's not destined for it.  Instead the packet should be routed to the default.  But NAT is configured.  So, when it routes the packet, it transforms the src IP and src port.  It then tracks the translation that it did in a NAT table.  When a response packet comes with the dst IP and dst port matching what's in the NAT table, the router performs the reverse translation and sends the packet back out the internal interface.  Here's an example tcpdump from my router of a DNS lookup from an internal node to `8.8.8.8`.
+How does this work?  The NAT box sees a packet inbound on an internal interface and sees that it's not destined for it.  Instead the packet should be routed to the default.  But NAT is configured.  So, when it routes the packet, it transforms the src IP and src port.  It then tracks the translation that it did in a connection tracking table, but often called conntrack.  (Note that connection tracking is a misnomer, it's really *flow* tracking, because it works for connection-less protocols like UDP as well.)  When a response packet comes with the dst IP and dst port matching what's in the conntrack table, the router performs the reverse translation and sends the packet back out the internal interface.  Here's an example tcpdump from my router of a DNS lookup from an internal node to `8.8.8.8`.  I'm using eth0 as the internal interface and wan0 as the internet facing interface (WAN == Wide-Area Network).
 
 On the internal interface, the router sees the incoming packet and you see the response packet.  Note the use of RFC1918 addresses.
 
@@ -200,10 +200,10 @@ $ sudo tcpdump -i wan0 -n port 53
 14:41:38.325834 IP 8.8.8.8.53 > 53.160.47.177.51888: 48315$ 1/0/1 A 93.184.216.34 (56)
 ```
 
-During this transformation, the NAT state would contain an entry that looks more or less like this:
+During this transformation, the NAT state in the conntrack table would contain an entry that looks more or less like this:
 
 ```
 (UDP, internal=192.168.1.2:51888, external=53.160.47.177:51888)
 ```
 
-If that was the entire NAT table (because there's only been one recent outbound flow), consider what would happen if the router saw an inbound packet on the public interface to 53.160.47.177:10000.  The kernel would accept the packet, because the packet is destined for its interface.  It would look in the NAT table and find no entry.  It would also look at the local open ports and find no entry.  So, the packet would be dropped.  If you want to accept an inbound connection (say because you're playing a peer-to-peer game, or you're accepting a video call), then this is no good.
+If that was the entire conntrack table (because there's only been one recent outbound flow), consider what would happen if the router saw an inbound packet on the public interface to 53.160.47.177:10000.  The kernel would accept the packet, because the packet is destined for its interface.  It would look in the conntrack table and find no entry.  It would also look at the local open ports and find no entry.  So, the packet would be dropped.  If you want to accept an inbound connection (say because you're playing a peer-to-peer game, or you're accepting a video call), then this is no good.
